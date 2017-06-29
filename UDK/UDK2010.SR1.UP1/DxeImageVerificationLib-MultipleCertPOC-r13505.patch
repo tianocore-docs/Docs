@@ -1,0 +1,72 @@
+Index: DxeImageVerificationLib.c
+===================================================================
+--- DxeImageVerificationLib.c	(revision 13511)
++++ DxeImageVerificationLib.c	(working copy)
+@@ -940,7 +940,8 @@
+ {
+   EFI_STATUS                Status;
+   BOOLEAN                   VerifyStatus;
+-  WIN_CERTIFICATE_EFI_PKCS  *PkcsCertData;
++  WIN_CERTIFICATE_EFI_PKCS  *PkcsCertData;        // 1st cert in the image
++  WIN_CERTIFICATE_EFI_PKCS  *PkcsCertData2nd;     // 2nd cert in the image if nonzero
+   EFI_SIGNATURE_LIST        *CertList;
+   EFI_SIGNATURE_DATA        *Cert;
+   UINTN                     DataSize;
+@@ -957,7 +958,23 @@
+   RootCertSize = 0;
+   VerifyStatus = FALSE;
+   PkcsCertData = (WIN_CERTIFICATE_EFI_PKCS *) (mImageBase + mSecDataDir->VirtualAddress);
++  PkcsCertData2nd = 0;
++  
++  //
++  // Multi-signature support proto:  check if image has a 2nd cert & if so, get its address
++  // NOTE: max of 2 signatures supported in proto
++  // NOTE: add cert fmt verification: ie chk wRevision=200, wCertificateType=002
++  //
+ 
++  //
++  // For images with multiple signatures, the size field of the secruity table data directory entry.
++  // equals the total size of all the certificates in the image
++  //
++  if((((UINTN) mImageBase + mImageSize) > (UINTN) ((UINTN)PkcsCertData + PkcsCertData->Hdr.dwLength)) &&
++     (mSecDataDir->Size >  PkcsCertData->Hdr.dwLength )) {
++    PkcsCertData2nd = (WIN_CERTIFICATE_EFI_PKCS *)  ((UINTN)PkcsCertData + PkcsCertData->Hdr.dwLength);
++  }
++
+   DataSize = 0;
+   Status   = gRT->GetVariable (VariableName, VendorGuid, NULL, &DataSize, NULL);
+   if (Status == EFI_BUFFER_TOO_SMALL) {
+@@ -987,7 +1004,7 @@
+           RootCertSize  = CertList->SignatureSize;
+ 
+           //
+-          // Call AuthenticodeVerify library to Verify Authenticode struct.
++          // Call AuthenticodeVerify library to Verify Authenticode struct for image's 1st certificate.
+           //
+           VerifyStatus = AuthenticodeVerify (
+                            PkcsCertData->CertData,
+@@ -1000,6 +1017,24 @@
+           if (VerifyStatus) {
+             goto Done;
+           }
++                    
++          //
++          // if image has a 2nd certificate, Call AuthenticodeVerify library to Verify Authenticode struct for that certificate.
++          //
++          if( PkcsCertData2nd != 0 ) {
++            VerifyStatus = AuthenticodeVerify (
++                             PkcsCertData2nd->CertData,
++                             PkcsCertData2nd->Hdr.dwLength - sizeof(PkcsCertData2nd->Hdr),
++                             RootCert,
++                             RootCertSize,
++                             mImageDigest,
++                             mImageDigestSize
++                             );
++            if (VerifyStatus) {
++              goto Done;
++            }
++          }
++          
+           Cert = (EFI_SIGNATURE_DATA *) ((UINT8 *) Cert + CertList->SignatureSize);
+         }
+       }

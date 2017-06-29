@@ -1,0 +1,128 @@
+Index: DxeImageVerificationLib.c
+===================================================================
+--- DxeImageVerificationLib.c	(revision 13511)
++++ DxeImageVerificationLib.c	(working copy)
+@@ -74,6 +74,39 @@
+ };
+ 
+ /**
++  Verify the WIN_CERTIFICATE header of an WIN_CERTIFICATE_EFI_PKCS certificate structure for PKCS Signed Data.
++ 
++  Caution:  This function may receive untrusted input.
++  The WIN_CERTIFICATE_EFI_PKCS certificate is an external input, so this funtion verifies 
++  its header structure is correct for PKCS Signed Data.
++ 
++  @param  PkcsCertData    Pointer to a WIN_CERTIFICATE_EFI_PKCS structure.
++ 
++  @retval TRUE           Verification of the WIN_CERTIFICATE header succeeded.
++  @retval FALSE          Verification of the WIN_CERTIFICATE header failed.
++ **/
++BOOLEAN
++VerifyWinCertificateForPkcsSignedData (
++  IN WIN_CERTIFICATE        *WinCert
++  )
++{
++  //
++  // Verify that the wRevision and wCertificateType fields of a WIN_CERTIFICATE structure
++  // contain the expected values
++  //
++  //    wRevision           The current revision level is 0x0200.
++  //    wCertificateType    See WIN_CERT_TYPE_xxx for the UEFI certificate types.
++  if( WinCert->wRevision != 0x200 ) {
++    return FALSE;
++  }
++  
++  if( WinCert->wCertificateType != WIN_CERT_TYPE_PKCS_SIGNED_DATA ) {
++      return FALSE;
++  }
++  return TRUE;
++}
++ 
++/**
+   Reads contents of a PE/COFF image in memory buffer.
+ 
+   Caution: This function may receive untrusted input.
+@@ -940,7 +973,8 @@
+ {
+   EFI_STATUS                Status;
+   BOOLEAN                   VerifyStatus;
+-  WIN_CERTIFICATE_EFI_PKCS  *PkcsCertData;
++  BOOLEAN                   MoreCertsInImage;
++  WIN_CERTIFICATE_EFI_PKCS  *PkcsCertData;        // current cert in the image
+   EFI_SIGNATURE_LIST        *CertList;
+   EFI_SIGNATURE_DATA        *Cert;
+   UINTN                     DataSize;
+@@ -956,8 +990,14 @@
+   RootCert     = NULL;
+   RootCertSize = 0;
+   VerifyStatus = FALSE;
+-  PkcsCertData = (WIN_CERTIFICATE_EFI_PKCS *) (mImageBase + mSecDataDir->VirtualAddress);
+-
++  PkcsCertData = (WIN_CERTIFICATE_EFI_PKCS *) (mImageBase + mSecDataDir->VirtualAddress);  // 1st cert in the image
++  MoreCertsInImage = TRUE;
++  
++  // Verify the certificate's header
++  if( VerifyWinCertificateForPkcsSignedData( &(PkcsCertData->Hdr) ) == FALSE ) {
++    return FALSE;
++  }
++  
+   DataSize = 0;
+   Status   = gRT->GetVariable (VariableName, VendorGuid, NULL, &DataSize, NULL);
+   if (Status == EFI_BUFFER_TOO_SMALL) {
+@@ -985,20 +1025,44 @@
+           //
+           RootCert      = Cert->SignatureData;
+           RootCertSize  = CertList->SignatureSize;
+-
++          
+           //
+-          // Call AuthenticodeVerify library to Verify Authenticode struct.
++          // Multi-signature support proto:  check all the certificates in the image
+           //
+-          VerifyStatus = AuthenticodeVerify (
+-                           PkcsCertData->CertData,
+-                           PkcsCertData->Hdr.dwLength - sizeof(PkcsCertData->Hdr),
+-                           RootCert,
+-                           RootCertSize,
+-                           mImageDigest,
+-                           mImageDigestSize
+-                           );
+-          if (VerifyStatus) {
+-            goto Done;
++          while ( MoreCertsInImage == TRUE ) {
++            //
++            // Verify Authenticode struct for image's current certificate.
++            //
++            VerifyStatus = AuthenticodeVerify (
++                             PkcsCertData->CertData,
++                             PkcsCertData->Hdr.dwLength - sizeof(PkcsCertData->Hdr),
++                             RootCert,
++                             RootCertSize,
++                             mImageDigest,
++                             mImageDigestSize
++                             );
++            if (VerifyStatus) {
++              goto Done;
++            }
++            
++            //
++            // For images with multiple signatures, the size field of the secruity table data directory entry.
++            // equals the total size of all the certificates in the image
++            //
++            if((((UINTN) mImageBase + mImageSize) > (UINTN) ((UINTN)PkcsCertData + PkcsCertData->Hdr.dwLength)) &&
++               (mSecDataDir->Size >  PkcsCertData->Hdr.dwLength )) {
++              // image contains another certificate
++              PkcsCertData = (WIN_CERTIFICATE_EFI_PKCS *)  ((UINTN)PkcsCertData + PkcsCertData->Hdr.dwLength);
++              
++              // Verify this certificate's header
++              if( VerifyWinCertificateForPkcsSignedData( &(PkcsCertData->Hdr) ) == FALSE ) {
++                VerifyStatus = FALSE;
++                goto Done;    // found a bad certificate in the image, abort,
++                break;
++              }
++            } else {
++              MoreCertsInImage = FALSE;
++            }                    
+           }
+           Cert = (EFI_SIGNATURE_DATA *) ((UINT8 *) Cert + CertList->SignatureSize);
+         }
