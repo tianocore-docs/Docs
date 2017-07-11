@@ -1,4 +1,4 @@
-# [UDK2017]( https://github.com/tianocore/tianocore.github.io/wiki/UDK2017) CyptoPkg Notes
+# [UDK2017]( https://github.com/tianocore/tianocore.github.io/wiki/UDK2017) CryptoPkg Notes
 ##                            NEW FEATURES AND CHANGES
 1. OpenSSL version was updated to the new 1.1.0 series of release. The current
    supported release is OpenSSL-1.1.0e (released at 2017-Feb-16).
