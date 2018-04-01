@@ -20,16 +20,16 @@
            4) Support protocols defined in latest UEFI/PI spec.
            5) Show more information for following protocols:
            
-            - ImageDevicePath
-            - DevicePath
-            - LoadedImage
-            - BusSpecificDriverOverride
-            - BlockIo
-            - DebugSupport
-            - GraphicsOutput
-            - PciIo
-            - UsbIo
-            - PartitionInfo
+              - ImageDevicePath
+              - DevicePath
+              - LoadedImage
+              - BusSpecificDriverOverride
+              - BlockIo
+              - DebugSupport
+              - GraphicsOutput
+              - PciIo
+              - UsbIo
+              - PartitionInfo
 
 2.  Convert "dp" and "tftp" from NULL class library to dynamic command.
 
