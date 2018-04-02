@@ -170,7 +170,7 @@
     2)  Fix double free pages on `LoadImage` failure path.
     3)  Fix Interface returned by `CoreOpenProtocol`.
 
-3. ** PiSmmCore**:
+3. **PiSmmCore**:
     1)  Unregister each other for LegacyBoot and `ExitBootServices` SMI handlers.
     2)  Set ForwardLink to `NULL` in `RemoveOldEntry()` to fix potential linked list assertion.
     3)  Fix hang due to already-freed memory dereference.
